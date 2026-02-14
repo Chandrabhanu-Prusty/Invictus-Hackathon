@@ -116,7 +116,8 @@ const importComponents = async (req, res) => {
 
 /**
  * POST /excel/import-bom
- * Accepts .xlsx file, parses rows, inserts PCB-component mappings.
+ * Accepts .xlsx file, reads "Master_Summary" sheet.
+ * Maps: PCB Name = "Bajaj PCB", Part Number = "Spare Part Code", Quantity = "Count"
  * Returns { mappingsInserted }
  */
 const importBOM = async (req, res) => {
@@ -130,64 +131,91 @@ const importBOM = async (req, res) => {
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.readFile(req.file.path);
 
+    // Load the first worksheet in the file
     const worksheet = workbook.worksheets[0];
     if (!worksheet) {
-      return res.status(400).json({ error: 'No worksheet found in Excel file' });
+      return res.status(400).json({ error: 'No worksheet found in Excel file.' });
+    }
+
+    // Read header row to find column indices dynamically
+    const headerRow = worksheet.getRow(1);
+    let sparePartCodeCol = null;
+    let countCol = null;
+
+    headerRow.eachCell((cell, colNumber) => {
+      const headerValue = String(cell.value || '').trim().toLowerCase();
+      if (headerValue === 'spare part code') {
+        sparePartCodeCol = colNumber;
+      } else if (headerValue === 'count') {
+        countCol = colNumber;
+      }
+    });
+
+    if (!sparePartCodeCol || !countCol) {
+      return res.status(400).json({
+        error: 'Required columns "Spare Part Code" and/or "Count" not found in header row.'
+      });
     }
 
     await client.query('BEGIN');
 
+    const pcbName = 'Bajaj PCB';
     let mappingsInserted = 0;
+
+    // Step 1: Find or create the PCB
+    let pcbId;
+    const pcbResult = await client.query(
+      'SELECT id FROM pcbs WHERE pcb_name = $1',
+      [pcbName]
+    );
+
+    if (pcbResult.rows.length > 0) {
+      pcbId = pcbResult.rows[0].id;
+    } else {
+      const insertPcbResult = await client.query(
+        'INSERT INTO pcbs (pcb_name) VALUES ($1) RETURNING id',
+        [pcbName]
+      );
+      pcbId = insertPcbResult.rows[0].id;
+    }
 
     for (let i = 2; i <= worksheet.rowCount; i++) {
       const row = worksheet.getRow(i);
 
-      const pcbName = row.getCell(1).value;
-      const partNumber = row.getCell(2).value;
-      const quantityRequired = row.getCell(3).value;
+      const partNumber = row.getCell(sparePartCodeCol).value;
+      const quantityRequired = row.getCell(countCol).value;
 
-      // Skip empty rows
-      if (!pcbName && !partNumber && !quantityRequired) {
+      // Skip rows where part number is missing
+      if (!partNumber) {
         continue;
       }
 
-      // PCB name and part number are required
-      if (!pcbName || !partNumber) {
+      // Skip rows where Count is empty or 0
+      const qty = parseInt(quantityRequired, 10);
+      if (!qty || qty <= 0) {
         continue;
       }
 
-      const pcbNameStr = String(pcbName).trim();
       const partNumberStr = String(partNumber).trim();
 
-      // Step 1: Find or create PCB
-      let pcbId;
-      const pcbResult = await client.query(
-        'SELECT id FROM pcbs WHERE pcb_name = $1',
-        [pcbNameStr]
-      );
-
-      if (pcbResult.rows.length > 0) {
-        pcbId = pcbResult.rows[0].id;
-      } else {
-        const insertPcbResult = await client.query(
-          'INSERT INTO pcbs (pcb_name) VALUES ($1) RETURNING id',
-          [pcbNameStr]
-        );
-        pcbId = insertPcbResult.rows[0].id;
-      }
-
-      // Step 2: Find component by part_number
+      // Step 2: Find component by part_number, or create it if not found
       const componentResult = await client.query(
         'SELECT id FROM components WHERE part_number = $1',
         [partNumberStr]
       );
 
-      // If component not found → skip row
+      let componentId;
       if (componentResult.rows.length === 0) {
-        continue;
+        // Auto-create component with default values
+        const insertComponentResult = await client.query(
+          `INSERT INTO components (name, part_number, current_stock, monthly_required_quantity)
+           VALUES ($1, $2, $3, $4) RETURNING id`,
+          [partNumberStr, partNumberStr, 1000, 500]
+        );
+        componentId = insertComponentResult.rows[0].id;
+      } else {
+        componentId = componentResult.rows[0].id;
       }
-
-      const componentId = componentResult.rows[0].id;
 
       // Step 3: Check for duplicate mapping
       const duplicateCheck = await client.query(
@@ -199,7 +227,7 @@ const importBOM = async (req, res) => {
       if (duplicateCheck.rows.length === 0) {
         await client.query(
           'INSERT INTO pcb_components (pcb_id, component_id, quantity_required) VALUES ($1, $2, $3)',
-          [pcbId, componentId, parseInt(quantityRequired, 10) || 1]
+          [pcbId, componentId, qty]
         );
         mappingsInserted++;
       }
@@ -214,6 +242,7 @@ const importBOM = async (req, res) => {
 
     res.status(200).json({
       message: 'BOM imported successfully',
+      pcbName,
       mappingsInserted
     });
 
