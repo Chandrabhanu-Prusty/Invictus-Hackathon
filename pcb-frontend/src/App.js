@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Login from "./pages/Login";
 import Dashboard from "./pages/Dashboard";
 import Inventory from "./pages/Inventory";
@@ -7,8 +7,11 @@ import Reports from "./pages/Reports";
 import PCBMapping from "./pages/PCBMapping";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Landing from "./pages/Landing";
+import Register from "./pages/Register";
+import Also from "./pages/Also";
 import LowStock from "./pages/LowStock";
 import ExportPage from "./pages/Export";
+import ImportPage from "./pages/Import";
 import Sidebar from "./components/Sidebar";
 import Navbar from "./components/Navbar";
 import "./index.css";
@@ -18,11 +21,10 @@ function App() {
     <BrowserRouter>
       <Routes>
         <Route path="/landing" element={<Landing />} />
+        <Route path="/also" element={<Also />} />
         <Route path="/login" element={<Login />} />
-        <Route
-          path="/"
-          element={<Navigate to="/dashboard" replace />}
-        />
+        <Route path="/register" element={<Register />} />
+        <Route path="/" element={<Landing />} />
 
         <Route
           path="/dashboard"
@@ -123,6 +125,21 @@ function App() {
                 <div className="main-area">
                   <Navbar />
                   <ExportPage />
+                </div>
+              </div>
+            </ProtectedRoute>
+          }
+        />
+
+        <Route
+          path="/import"
+          element={
+            <ProtectedRoute>
+              <div className="app-shell">
+                <Sidebar />
+                <div className="main-area">
+                  <Navbar />
+                  <ImportPage />
                 </div>
               </div>
             </ProtectedRoute>

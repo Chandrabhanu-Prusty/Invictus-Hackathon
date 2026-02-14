@@ -1,91 +1,274 @@
 import React, { useEffect, useState } from "react";
 
-export default function LowStock(){
+export default function LowStock() {
   const [components, setComponents] = useState([]);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState("all");
+  const [sort, setSort] = useState("urgency");
+  const [reorderQty, setReorderQty] = useState({});
+  const [showReorder, setShowReorder] = useState(null);
 
-  useEffect(()=>{
-    setComponents(JSON.parse(localStorage.getItem('components') || '[]'));
-  },[]);
+  useEffect(() => {
+    setComponents(JSON.parse(localStorage.getItem("components") || "[]"));
+  }, []);
 
-  const alerts = components
-    .filter(c => c.stock <= c.threshold || c.stock <= c.monthlyRequired)
-    .map(c=>({ id:c.id, name:c.name, mfr: c.manufacturer || 'N/A', mpn: c.partNumber, stock:c.stock, threshold: c.threshold || c.monthlyRequired, status: c.stock<= (c.threshold||c.monthlyRequired)/4 ? 'CRITICAL' : (c.stock <= (c.threshold||c.monthlyRequired)*0.25 ? 'WARNING' : 'LOW') }));
-
-  function reorder(a){
-    alert(`Reorder initiated for ${a.name} (mock)`);
+  function saveComponents(list) {
+    setComponents(list);
+    localStorage.setItem("components", JSON.stringify(list));
   }
 
-  const grouped = alerts.filter(a=> filter==='all' ? true : (filter==='critical' ? a.status==='CRITICAL' : a.status==='WARNING'));
+  /* ── Build alerts from components that are at or below monthly required ── */
+  const alerts = components
+    .filter((c) => c.stock <= c.monthlyRequired)
+    .map((c) => {
+      const ratio = c.monthlyRequired > 0 ? c.stock / c.monthlyRequired : 1;
+      let status = "LOW";
+      if (ratio <= 0.25) status = "CRITICAL";
+      else if (ratio <= 0.5) status = "WARNING";
+      const deficit = c.monthlyRequired - c.stock;
+      return {
+        id: c.id,
+        name: c.name,
+        partNumber: c.partNumber,
+        category: c.category || "—",
+        stock: c.stock,
+        required: c.monthlyRequired,
+        ratio,
+        pct: Math.round(ratio * 100),
+        status,
+        deficit,
+      };
+    });
+
+  /* ── Filter ── */
+  const filtered = alerts.filter((a) => {
+    if (filter === "all") return true;
+    return a.status === filter.toUpperCase();
+  });
+
+  /* ── Sort ── */
+  const sorted = [...filtered].sort((a, b) => {
+    if (sort === "urgency") return a.ratio - b.ratio;
+    if (sort === "name") return a.name.localeCompare(b.name);
+    if (sort === "stock") return a.stock - b.stock;
+    if (sort === "deficit") return b.deficit - a.deficit;
+    return 0;
+  });
+
+  /* ── Reorder (add stock) ── */
+  function handleReorder(alert) {
+    const addQty = parseInt(reorderQty[alert.id]) || alert.required;
+    const updated = components.map((c) =>
+      c.id === alert.id ? { ...c, stock: c.stock + addQty } : c
+    );
+    saveComponents(updated);
+    setShowReorder(null);
+    setReorderQty({});
+  }
+
+  /* ── Reorder all critical ── */
+  function reorderAllCritical() {
+    const critIds = alerts.filter((a) => a.status === "CRITICAL").map((a) => a.id);
+    if (critIds.length === 0) return alert("No critical items to reorder.");
+    if (!window.confirm(`Reorder ${critIds.length} critical items to full stock levels?`)) return;
+    const updated = components.map((c) => {
+      if (critIds.includes(c.id)) {
+        return { ...c, stock: c.stock + c.monthlyRequired };
+      }
+      return c;
+    });
+    saveComponents(updated);
+  }
+
+  /* ── Export shortage report ── */
+  function exportReport() {
+    if (alerts.length === 0) return alert("No alerts to export.");
+    const headers = ["Component", "Part Number", "Category", "Current Stock", "Required", "Deficit", "Status"];
+    const rows = alerts.map((a) => [a.name, a.partNumber, a.category, a.stock, a.required, a.deficit, a.status]);
+    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "shortage_report.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /* ── KPI counts ── */
+  const criticalCount = alerts.filter((a) => a.status === "CRITICAL").length;
+  const warningCount = alerts.filter((a) => a.status === "WARNING").length;
+  const lowCount = alerts.filter((a) => a.status === "LOW").length;
+  const totalDeficit = alerts.reduce((s, a) => s + a.deficit, 0);
+
+  /* ── Status bar color ── */
+  function barColor(status) {
+    if (status === "CRITICAL") return "#ef4444";
+    if (status === "WARNING") return "#f59e0b";
+    return "#3b82f6";
+  }
 
   return (
-    <div className="lowstock-shell container">
+    <div className="container">
+      {/* ── Header ── */}
       <div className="page-header">
         <div>
-          <div className="breadcrumbs">Inventory &gt; Low Stock Alerts</div>
+          <div className="breadcrumbs">Inventory &gt; <strong>LOW STOCK ALERTS</strong></div>
           <h1>Low Stock Alerts</h1>
-          <div className="muted">Action required for components falling below critical thresholds.</div>
+          <p className="muted">Action required for components falling below critical thresholds.</p>
         </div>
         <div className="header-actions">
-          <button className="btn">Shortage Report</button>
-          <button className="btn primary">Reorder All Critical</button>
+          <button className="btn" onClick={exportReport}>⬇ Shortage Report</button>
+          <button className="btn primary" onClick={reorderAllCritical}>🚨 Reorder All Critical</button>
         </div>
       </div>
 
-      <div className="cards-row">
-        <div className="card">
-          <div className="card-header"><h4>Critical Items</h4></div>
-          <div className="card-body"><div className="card-value">{alerts.filter(a=>a.status==='CRITICAL').length}</div><div className="card-meta"><div style={{color:'#ef4444'}}>Immediate action required (&lt;10%)</div></div></div>
+      {/* ── KPI Cards ── */}
+      <div className="kpis">
+        <div className="kpi card">
+          <div className="kpi-title">CRITICAL</div>
+          <div className="kpi-value" style={{ color: "#ef4444" }}>{criticalCount}</div>
         </div>
-        <div className="card">
-          <div className="card-header"><h4>Warning Items</h4></div>
-          <div className="card-body"><div className="card-value">{alerts.filter(a=>a.status==='WARNING').length}</div><div className="card-meta"><div style={{color:'#f59e0b'}}>Approach threshold (&lt;25%)</div></div></div>
+        <div className="kpi card">
+          <div className="kpi-title">WARNING</div>
+          <div className="kpi-value" style={{ color: "#f59e0b" }}>{warningCount}</div>
         </div>
-        <div className="card">
-          <div className="card-header"><h4>Pending Orders</h4></div>
-          <div className="card-body"><div className="card-value">05</div><div className="card-meta"><div style={{color:'#64748b'}}>Estimated restock in 48h</div></div></div>
+        <div className="kpi card">
+          <div className="kpi-title">LOW</div>
+          <div className="kpi-value" style={{ color: "#3b82f6" }}>{lowCount}</div>
+        </div>
+        <div className="kpi card">
+          <div className="kpi-title">TOTAL DEFICIT</div>
+          <div className="kpi-value">{totalDeficit.toLocaleString()}</div>
         </div>
       </div>
 
-      <div style={{marginTop:12}}>
-        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-          <div style={{display:'flex',gap:16,alignItems:'center'}}>
-            <button className={`btn ${filter==='all'?'primary':''}`} onClick={()=>setFilter('all')}>All Alerts ({alerts.length})</button>
-            <button className={`btn ${filter==='critical'?'primary':''}`} onClick={()=>setFilter('critical')}>Critical (&lt;10%)</button>
-            <button className={`btn ${filter==='warning'?'primary':''}`} onClick={()=>setFilter('warning')}>Warning (&lt;25%)</button>
-          </div>
-          <div className="muted">Sort by: Urgency ▾</div>
+      {/* ── Filter + Sort ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className={`btn ${filter === "all" ? "primary" : ""}`} onClick={() => setFilter("all")}>All ({alerts.length})</button>
+          <button className={`btn ${filter === "critical" ? "primary" : ""}`} onClick={() => setFilter("critical")}>Critical ({criticalCount})</button>
+          <button className={`btn ${filter === "warning" ? "primary" : ""}`} onClick={() => setFilter("warning")}>Warning ({warningCount})</button>
+          <button className={`btn ${filter === "low" ? "primary" : ""}`} onClick={() => setFilter("low")}>Low ({lowCount})</button>
         </div>
+        <select value={sort} onChange={(e) => setSort(e.target.value)} style={{ padding: "6px 12px", borderRadius: 6, border: "1px solid #e6eef6", fontSize: 13 }}>
+          <option value="urgency">Sort: Urgency</option>
+          <option value="name">Sort: Name A–Z</option>
+          <option value="stock">Sort: Lowest Stock</option>
+          <option value="deficit">Sort: Largest Deficit</option>
+        </select>
+      </div>
 
-        <div className="alerts-grid" style={{marginTop:12}}>
-          {grouped.map(a=> (
-            <div key={a.id} className={`alert-card ${a.status.toLowerCase()}`}>
-              <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
-                <div>
-                  <div style={{fontWeight:800}}>{a.name}</div>
-                  <div style={{fontSize:12,color:'#94a3b8'}}>MPN: {a.mpn || 'N/A'}</div>
-                </div>
-                <div style={{textAlign:'right'}}>
-                  <div style={{fontWeight:800}}>{a.stock} / {a.threshold} units</div>
-                  <div style={{fontSize:12,color:'#94a3b8'}}>Lead Time: {Math.max(2, Math.round(a.threshold/50))} days</div>
+      {/* ── Alert Cards ── */}
+      {sorted.length === 0 && (
+        <div className="card" style={{ padding: 48, textAlign: "center", color: "#10b981" }}>
+          <div style={{ fontSize: 36, marginBottom: 12 }}>✅</div>
+          <div style={{ fontSize: 18, fontWeight: 700 }}>All stock levels are healthy!</div>
+          <div className="muted" style={{ marginTop: 6 }}>No components are below their required thresholds.</div>
+        </div>
+      )}
+
+      <div className="alerts-grid">
+        {sorted.map((a) => (
+          <div key={a.id} className={`alert-card ${a.status.toLowerCase()}`}>
+            {/* Top row */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start" }}>
+              <div>
+                <div style={{ fontWeight: 800, fontSize: 15 }}>{a.name}</div>
+                <div style={{ fontSize: 12, color: "#94a3b8", marginTop: 2 }}>
+                  <span className="chip" style={{ marginRight: 8 }}>{a.partNumber}</span>
+                  {a.category}
                 </div>
               </div>
-
-              <div style={{marginTop:12}}>
-                <div style={{height:8,background:'#f1f5f9',borderRadius:6,overflow:'hidden'}}>
-                  <div style={{width: `${Math.max(6, Math.min(100, Math.round((a.stock/a.threshold)*100)))}%`,height:8,background:a.status==='CRITICAL'? '#ef4444': a.status==='WARNING'? '#f59e0b':'#10b981' }} />
-                </div>
-                <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:10}}>
-                  <button className="btn primary" onClick={()=>reorder(a)}>Quick Reorder</button>
-                  <button className="btn">...</button>
-                </div>
+              <div>
+                <span className={`status-chip ${a.status.toLowerCase()}`}>{a.status}</span>
               </div>
             </div>
-          ))}
 
-          <div className="alert-card monitor"><div style={{display:'flex',alignItems:'center',justifyContent:'center',height:160,color:'#64748b'}}>Monitor New SKU</div></div>
-        </div>
+            {/* Stock info */}
+            <div style={{ display: "flex", justifyContent: "space-between", marginTop: 14, fontSize: 13, color: "#475569" }}>
+              <span>Current: <strong>{a.stock}</strong></span>
+              <span>Required: <strong>{a.required}</strong></span>
+              <span>Deficit: <strong style={{ color: "#ef4444" }}>-{a.deficit}</strong></span>
+            </div>
+
+            {/* Progress bar */}
+            <div style={{ marginTop: 10 }}>
+              <div style={{ height: 8, background: "#f1f5f9", borderRadius: 6, overflow: "hidden" }}>
+                <div style={{
+                  width: `${Math.max(4, a.pct)}%`,
+                  height: 8,
+                  background: barColor(a.status),
+                  borderRadius: 6,
+                  transition: "width 0.4s ease"
+                }} />
+              </div>
+              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 4 }}>{a.pct}% of required threshold</div>
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              {showReorder === a.id ? (
+                <>
+                  <input
+                    type="number"
+                    min="1"
+                    placeholder={`Qty (default: ${a.required})`}
+                    value={reorderQty[a.id] || ""}
+                    onChange={(e) => setReorderQty({ ...reorderQty, [a.id]: e.target.value })}
+                    style={{ flex: 1, padding: "6px 10px", borderRadius: 6, border: "1px solid #e6eef6", fontSize: 13 }}
+                  />
+                  <button className="btn primary" onClick={() => handleReorder(a)}>Confirm</button>
+                  <button className="btn" onClick={() => setShowReorder(null)}>Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button className="btn primary" style={{ flex: 1 }} onClick={() => setShowReorder(a.id)}>🔄 Quick Reorder</button>
+                </>
+              )}
+            </div>
+          </div>
+        ))}
       </div>
+
+      {/* ── Summary Table ── */}
+      {alerts.length > 0 && (
+        <div className="card" style={{ marginTop: 20, padding: 20 }}>
+          <h3 style={{ marginTop: 0 }}>Alert Summary Table</h3>
+          <table className="mapping-table">
+            <thead>
+              <tr>
+                <th>Component</th>
+                <th>Part Number</th>
+                <th>Category</th>
+                <th>Current Stock</th>
+                <th>Required</th>
+                <th>Deficit</th>
+                <th>Level</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sorted.map((a) => (
+                <tr key={a.id}>
+                  <td style={{ fontWeight: 700 }}>{a.name}</td>
+                  <td><span className="chip">{a.partNumber}</span></td>
+                  <td>{a.category}</td>
+                  <td style={{ fontWeight: 700 }}>{a.stock}</td>
+                  <td>{a.required}</td>
+                  <td style={{ color: "#ef4444", fontWeight: 600 }}>-{a.deficit}</td>
+                  <td>
+                    <div style={{ width: 60, height: 6, background: "#f1f5f9", borderRadius: 4, overflow: "hidden" }}>
+                      <div style={{ width: `${Math.max(4, a.pct)}%`, height: 6, background: barColor(a.status), borderRadius: 4 }} />
+                    </div>
+                    <div style={{ fontSize: 10, color: "#94a3b8" }}>{a.pct}%</div>
+                  </td>
+                  <td><span className={`status-chip ${a.status.toLowerCase()}`}>{a.status}</span></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }
