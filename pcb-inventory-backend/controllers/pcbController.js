@@ -8,6 +8,7 @@ const getAllPCBs = async (req, res) => {
         COALESCE(
           json_agg(
             json_build_object(
+              'pcb_component_id', pc.id,
               'component_id', c.id,
               'component_name', c.name,
               'part_number', c.part_number,
@@ -79,8 +80,64 @@ const deletePCB = async (req, res) => {
   }
 };
 
+const addBOMRow = async (req, res) => {
+  try {
+    const { id } = req.params; // pcb_id
+    const { component_id, quantity_required } = req.body;
+    if (!component_id || !quantity_required) {
+      return res.status(400).json({ error: 'component_id and quantity_required are required.' });
+    }
+    const result = await pool.query(
+      'INSERT INTO pcb_components (pcb_id, component_id, quantity_required) VALUES ($1, $2, $3) RETURNING *',
+      [id, component_id, quantity_required]
+    );
+    res.status(201).json({ message: 'BOM row added', row: result.rows[0] });
+  } catch (error) {
+    if (error.code === '23505') {
+      return res.status(409).json({ error: 'This component is already in the BOM.' });
+    }
+    console.error('Error adding BOM row:', error);
+    res.status(500).json({ error: 'Failed to add BOM row', details: error.message });
+  }
+};
+
+const removeBOMRow = async (req, res) => {
+  try {
+    const { id, rowId } = req.params;
+    await pool.query('DELETE FROM pcb_components WHERE pcb_id = $1 AND id = $2', [id, rowId]);
+    res.status(200).json({ message: 'BOM row removed' });
+  } catch (error) {
+    console.error('Error removing BOM row:', error);
+    res.status(500).json({ error: 'Failed to remove BOM row', details: error.message });
+  }
+};
+
+const updateBOMRow = async (req, res) => {
+  try {
+    const { id, rowId } = req.params;
+    const { quantity_required } = req.body;
+    if (!quantity_required || quantity_required <= 0) {
+      return res.status(400).json({ error: 'Valid quantity_required is required.' });
+    }
+    const result = await pool.query(
+      'UPDATE pcb_components SET quantity_required = $1 WHERE pcb_id = $2 AND id = $3 RETURNING *',
+      [quantity_required, id, rowId]
+    );
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'BOM row not found.' });
+    }
+    res.status(200).json({ message: 'BOM row updated', row: result.rows[0] });
+  } catch (error) {
+    console.error('Error updating BOM row:', error);
+    res.status(500).json({ error: 'Failed to update BOM row', details: error.message });
+  }
+};
+
 module.exports = {
   getAllPCBs,
   createPCB,
-  deletePCB
+  deletePCB,
+  addBOMRow,
+  removeBOMRow,
+  updateBOMRow
 };

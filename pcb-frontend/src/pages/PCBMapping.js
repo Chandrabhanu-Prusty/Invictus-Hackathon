@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ExcelJS from "exceljs";
+import { fetchPCBs, fetchComponents, createPCB as apiCreatePCB, deletePCB as apiDeletePCB, addBOMRow, removeBOMRow, updateBOMQty } from "../api";
 
 export default function PCBMapping() {
   const [pcbs, setPcbs] = useState([]);
@@ -13,13 +14,17 @@ export default function PCBMapping() {
   const [newPcbName, setNewPcbName] = useState("");
 
   useEffect(() => {
-    setPcbs(JSON.parse(localStorage.getItem("pcbs") || "[]"));
-    setComponents(JSON.parse(localStorage.getItem("components") || "[]"));
+    loadData();
   }, []);
 
-  function savePcbs(list) {
-    setPcbs(list);
-    localStorage.setItem("pcbs", JSON.stringify(list));
+  async function loadData() {
+    try {
+      const [pcbList, compList] = await Promise.all([fetchPCBs(), fetchComponents()]);
+      setPcbs(pcbList);
+      setComponents(compList);
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    }
   }
 
   /* ── Get the currently selected PCB object ── */
@@ -27,65 +32,73 @@ export default function PCBMapping() {
   const bomRows = currentPcb?.bom || [];
 
   /* ── Create new PCB ── */
-  function handleCreatePcb() {
+  async function handleCreatePcb() {
     if (!newPcbName.trim()) return alert("Enter a PCB name");
-    const maxId = pcbs.reduce((m, p) => Math.max(m, p.id), 0);
-    const created = { id: maxId + 1, name: newPcbName.trim(), bom: [] };
-    const updated = [...pcbs, created];
-    savePcbs(updated);
-    setSelectedPcb(String(created.id));
-    setNewPcbName("");
-    setShowNewPcb(false);
+    try {
+      const created = await apiCreatePCB(newPcbName.trim(), "");
+      await loadData();
+      setSelectedPcb(String(created.id));
+      setNewPcbName("");
+      setShowNewPcb(false);
+    } catch (err) {
+      alert(err.message || "Failed to create PCB");
+    }
   }
 
   /* ── Add BOM row ── */
-  function addRow() {
+  async function addRow() {
     if (!selectedPcb) return alert("Select a PCB first");
     if (!componentId) return alert("Select a component");
     if (!qtyPerPcb || qtyPerPcb <= 0) return alert("Enter a valid quantity");
 
     const compIdNum = parseInt(componentId);
-    // Check if component already in BOM
     if (bomRows.find((r) => r.compId === compIdNum)) {
       return alert("This component is already in the BOM. Edit quantity instead.");
     }
 
-    const newRow = { id: Date.now(), compId: compIdNum, qty: parseInt(qtyPerPcb) };
-    const updatedBom = [...bomRows, newRow];
-    const updatedPcbs = pcbs.map((p) =>
-      String(p.id) === String(selectedPcb) ? { ...p, bom: updatedBom } : p
-    );
-    savePcbs(updatedPcbs);
-    setComponentId("");
-    setQtyPerPcb(1);
+    try {
+      await addBOMRow(selectedPcb, compIdNum, parseInt(qtyPerPcb));
+      await loadData();
+      setComponentId("");
+      setQtyPerPcb(1);
+    } catch (err) {
+      alert(err.message || "Failed to add BOM row");
+    }
   }
 
   /* ── Remove BOM row ── */
-  function removeRow(rowId) {
-    const updatedBom = bomRows.filter((r) => r.id !== rowId);
-    const updatedPcbs = pcbs.map((p) =>
-      String(p.id) === String(selectedPcb) ? { ...p, bom: updatedBom } : p
-    );
-    savePcbs(updatedPcbs);
+  async function removeRow(rowId) {
+    try {
+      await removeBOMRow(selectedPcb, rowId);
+      await loadData();
+    } catch (err) {
+      alert(err.message || "Failed to remove BOM row");
+    }
   }
 
   /* ── Update quantity ── */
-  function updateQty(rowId, newQty) {
+  async function handleUpdateQty(rowId, newQty) {
     const qty = parseInt(newQty);
     if (isNaN(qty) || qty <= 0) return;
-    const updatedBom = bomRows.map((r) => (r.id === rowId ? { ...r, qty } : r));
-    const updatedPcbs = pcbs.map((p) =>
-      String(p.id) === String(selectedPcb) ? { ...p, bom: updatedBom } : p
-    );
-    savePcbs(updatedPcbs);
+    try {
+      await updateBOMQty(selectedPcb, rowId, qty);
+      await loadData();
+    } catch (err) {
+      alert(err.message || "Failed to update quantity");
+    }
   }
 
   /* ── Delete PCB ── */
-  function deletePcb() {
+  async function deletePcb() {
     if (!selectedPcb) return;
     if (!window.confirm(`Delete "${currentPcb?.name}"? This will remove it and its entire BOM.`)) return;
-    savePcbs(pcbs.filter((p) => String(p.id) !== String(selectedPcb)));
-    setSelectedPcb("");
+    try {
+      await apiDeletePCB(selectedPcb);
+      await loadData();
+      setSelectedPcb("");
+    } catch (err) {
+      alert(err.message || "Failed to delete PCB");
+    }
   }
 
   /* ── Export XLSX ── */
@@ -239,7 +252,7 @@ export default function PCBMapping() {
               const status = stock === 0 ? "STOCK OUT" : stock < r.qty * 10 ? "LOW" : "SUFFICIENT";
               const statusClass = status === "SUFFICIENT" ? "ok" : status === "LOW" ? "low" : "critical";
               return (
-                <tr key={r.id}>
+                <tr key={r.rowId || r.compId}>
                   <td>
                     <div style={{ fontWeight: 700 }}>{comp.name}</div>
                     <div className="muted" style={{ fontSize: 12 }}>{comp.category || "—"}</div>
@@ -251,13 +264,13 @@ export default function PCBMapping() {
                       type="number"
                       min="1"
                       value={r.qty}
-                      onChange={(e) => updateQty(r.id, e.target.value)}
+                      onChange={(e) => handleUpdateQty(r.rowId, e.target.value)}
                       style={{ width: 60, padding: "4px 8px", borderRadius: 6, border: "1px solid #e6eef6", textAlign: "center" }}
                     />
                   </td>
                   <td style={{ fontWeight: 600 }}>{stock} units</td>
                   <td><span className={`status-chip ${statusClass}`}>{status}</span></td>
-                  <td><button className="btn small danger" onClick={() => removeRow(r.id)}>🗑 Remove</button></td>
+                  <td><button className="btn small danger" onClick={() => removeRow(r.rowId)}>🗑 Remove</button></td>
                 </tr>
               );
             })}

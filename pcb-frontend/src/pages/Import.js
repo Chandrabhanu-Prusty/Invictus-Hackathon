@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from "react";
 import ExcelJS from "exceljs";
+import { importComponentsFile } from "../api";
 
 const FIELD_MAP = {
     "Name": "name",
@@ -21,6 +22,7 @@ export default function ImportPage() {
     const [dragOver, setDragOver] = useState(false);
     const [fileName, setFileName] = useState("");
     const [importHistory, setImportHistory] = useState([]);
+    const [uploadedFile, setUploadedFile] = useState(null);
     const fileRef = useRef();
 
     useEffect(() => {
@@ -66,6 +68,7 @@ export default function ImportPage() {
             return alert("Please upload a .xlsx file.");
         }
         setFileName(file.name);
+        setUploadedFile(file);
         const buffer = await file.arrayBuffer();
         const { headers: hdr, rows } = await parseXLSX(buffer);
         setHeaders(hdr);
@@ -131,49 +134,32 @@ export default function ImportPage() {
         setStep(3);
     }
 
-    /* ── Step 3 → 4: Import into localStorage ── */
-    function doImport() {
-        const existing = JSON.parse(localStorage.getItem("components") || "[]");
-        let added = 0;
-        let updated = 0;
-
-        importData.forEach((item) => {
-            const idx = existing.findIndex((c) => c.partNumber === item.partNumber);
-            if (idx >= 0) {
-                // Update existing component
-                existing[idx] = {
-                    ...existing[idx],
-                    name: item.name || existing[idx].name,
-                    category: item.category || existing[idx].category,
-                    stock: item.stock !== undefined ? item.stock : existing[idx].stock,
-                    monthlyRequired: item.monthlyRequired !== undefined ? item.monthlyRequired : existing[idx].monthlyRequired,
-                };
-                updated++;
-            } else {
-                // Add new component
-                existing.push({
-                    id: Date.now() + Math.random(),
-                    name: item.name,
-                    partNumber: item.partNumber,
-                    category: item.category || "General",
-                    stock: item.stock || 0,
-                    monthlyRequired: item.monthlyRequired || 0,
-                });
-                added++;
+    /* ── Step 3 → 4: Import via Backend API ── */
+    async function doImport() {
+        try {
+            if (!uploadedFile) {
+                return alert("No file found. Please re-upload.");
             }
-        });
 
-        localStorage.setItem("components", JSON.stringify(existing));
+            const data = await importComponentsFile(uploadedFile);
+            const result = {
+                added: data.inserted || importData.length,
+                updated: data.updated || 0,
+                total: importData.length,
+                date: new Date().toLocaleString(),
+                file: fileName
+            };
+            setImportResult(result);
 
-        const result = { added, updated, total: importData.length, date: new Date().toLocaleString(), file: fileName };
-        setImportResult(result);
+            // Save to local history for display
+            const history = [{ id: Date.now(), ...result }, ...importHistory].slice(0, 20);
+            setImportHistory(history);
+            localStorage.setItem("importHistory", JSON.stringify(history));
 
-        // Save to history
-        const history = [{ id: Date.now(), ...result }, ...importHistory].slice(0, 20);
-        setImportHistory(history);
-        localStorage.setItem("importHistory", JSON.stringify(history));
-
-        setStep(4);
+            setStep(4);
+        } catch (err) {
+            alert(err.message || "Import failed");
+        }
     }
 
     /* ── Reset ── */

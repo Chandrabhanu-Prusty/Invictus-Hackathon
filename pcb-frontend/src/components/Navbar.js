@@ -4,7 +4,8 @@ import { useNavigate } from "react-router-dom";
 export default function Navbar() {
   const navigate = useNavigate();
   const user = JSON.parse(localStorage.getItem("currentUser") || "null");
-  const initials = user ? user.name.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) : "U";
+  const displayName = user?.name || user?.email?.split("@")[0] || "User";
+  const initials = displayName.split(" ").map((w) => w[0]).join("").toUpperCase().slice(0, 2) || "U";
 
   /* ── State ── */
   const [searchQuery, setSearchQuery] = useState("");
@@ -178,14 +179,14 @@ export default function Navbar() {
         <div className="nav-profile-wrap" ref={profileRef}>
           <button className="nav-profile-btn" onClick={() => { setShowProfile(!showProfile); setShowNotif(false); }}>
             <span className="nav-avatar">{initials}</span>
-            {user && <span className="nav-user-name">{user.name}</span>}
+            {user && <span className="nav-user-name">{displayName}</span>}
           </button>
           {showProfile && (
             <div className="nav-dropdown profile-dropdown">
               <div className="nav-profile-header">
                 <div className="nav-avatar large">{initials}</div>
                 <div>
-                  <div style={{ fontWeight: 700, fontSize: 14 }}>{user?.name || "User"}</div>
+                  <div style={{ fontWeight: 700, fontSize: 14 }}>{displayName}</div>
                   <div style={{ fontSize: 12, color: "#64748b" }}>{user?.email || "—"}</div>
                 </div>
               </div>

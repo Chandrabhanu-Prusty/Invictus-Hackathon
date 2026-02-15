@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ExcelJS from "exceljs";
+import { fetchComponents, fetchPCBs, fetchProductionHistory } from "../api";
 
 export default function Reports() {
   const [components, setComponents] = useState([]);
@@ -12,9 +13,9 @@ export default function Reports() {
   const perPage = 8;
 
   useEffect(() => {
-    setComponents(JSON.parse(localStorage.getItem("components") || "[]"));
-    setProduction(JSON.parse(localStorage.getItem("productionHistory") || "[]"));
-    setPcbs(JSON.parse(localStorage.getItem("pcbs") || "[]"));
+    fetchComponents().then(setComponents).catch(console.error);
+    fetchProductionHistory().then(setProduction).catch(console.error);
+    fetchPCBs().then(setPcbs).catch(console.error);
   }, []);
 
   /* ── Categories ── */
