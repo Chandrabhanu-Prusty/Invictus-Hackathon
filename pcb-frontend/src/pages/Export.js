@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useMemo } from "react";
+import ExcelJS from "exceljs";
 
 /* ── Column definitions per data source (stable reference) ── */
 const columnDefs = {
@@ -48,8 +49,6 @@ export default function ExportPage() {
   /* ── Settings ── */
   const [dataSource, setDataSource] = useState("components");
   const [fileName, setFileName] = useState("inventory_export");
-  const [format, setFormat] = useState("csv");
-  const [viewMode, setViewMode] = useState("grid");
   const [selected, setSelected] = useState(new Set());
   const [exportHistory, setExportHistory] = useState([]);
 
@@ -94,39 +93,59 @@ export default function ExportPage() {
 
   const selectedCols = allCols.filter((c) => selected.has(c));
 
-  /* ── Download ── */
-  function doDownload() {
+  /* ── Download as XLSX ── */
+  async function doDownload() {
     if (selected.size === 0) return alert("Select at least one column.");
     if (sourceData.length === 0) return alert("No data to export.");
 
-    let content, mimeType, extension;
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Export");
 
-    if (format === "csv") {
-      const rows = exportRows.map((r) => selectedCols.map((c) => `"${r[c] ?? ""}"`).join(","));
-      content = [selectedCols.join(","), ...rows].join("\n");
-      mimeType = "text/csv;charset=utf-8;";
-      extension = ".csv";
-    } else {
-      content = JSON.stringify(exportRows, null, 2);
-      mimeType = "application/json";
-      extension = ".json";
-    }
+    // Add header row
+    worksheet.addRow(selectedCols);
 
-    const blob = new Blob([content], { type: mimeType });
+    // Style header row
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B5FFF" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center" };
+    });
+
+    // Add data rows
+    exportRows.forEach((row) => {
+      worksheet.addRow(selectedCols.map((c) => row[c] ?? ""));
+    });
+
+    // Auto-fit column widths
+    worksheet.columns.forEach((col, i) => {
+      const header = selectedCols[i] || "";
+      let maxLen = header.length;
+      exportRows.forEach((row) => {
+        const val = String(row[header] ?? "");
+        if (val.length > maxLen) maxLen = val.length;
+      });
+      col.width = Math.min(maxLen + 4, 40);
+    });
+
+    // Generate buffer and download
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `${fileName}${extension}`;
+    a.download = `${fileName}.xlsx`;
     a.click();
     URL.revokeObjectURL(a.href);
 
     // Save to export history
     const entry = {
       id: Date.now(),
-      name: `${fileName}${extension}`,
+      name: `${fileName}.xlsx`,
       source: dataSource,
       rows: sourceData.length,
       cols: selected.size,
-      format,
+      format: "xlsx",
       date: new Date().toLocaleString(),
     };
     const updatedHistory = [entry, ...exportHistory].slice(0, 20);
@@ -151,10 +170,10 @@ export default function ExportPage() {
         <div>
           <div className="breadcrumbs">Data Management &gt; <strong>EXPORT</strong></div>
           <h1>Configure Export</h1>
-          <p className="muted">Select data source, columns, and format, then download.</p>
+          <p className="muted">Select data source and columns, then download as Excel (.xlsx).</p>
         </div>
         <div className="header-actions">
-          <button className="btn primary" onClick={doDownload}>⬇ Download {format.toUpperCase()}</button>
+          <button className="btn primary" onClick={doDownload}>⬇ Download XLSX</button>
         </div>
       </div>
 
@@ -183,8 +202,7 @@ export default function ExportPage() {
 
           <label className="field-label">Format</label>
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <button className={`btn ${format === "csv" ? "primary" : ""}`} onClick={() => setFormat("csv")} style={{ flex: 1 }}>📄 CSV</button>
-            <button className={`btn ${format === "json" ? "primary" : ""}`} onClick={() => setFormat("json")} style={{ flex: 1 }}>🔧 JSON</button>
+            <button className="btn primary" style={{ flex: 1, cursor: "default" }}>📊 XLSX (Excel)</button>
           </div>
 
           {/* Column selection */}
@@ -208,7 +226,7 @@ export default function ExportPage() {
             </div>
           ))}
 
-          <button className="btn primary" onClick={doDownload} style={{ width: "100%", marginTop: 8 }}>⬇ Download {format.toUpperCase()}</button>
+          <button className="btn primary" onClick={doDownload} style={{ width: "100%", marginTop: 8 }}>⬇ Download XLSX</button>
         </div>
 
         {/* ── RIGHT: Preview ── */}
@@ -216,15 +234,11 @@ export default function ExportPage() {
           <div className="card" style={{ padding: 20 }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
               <h3 style={{ margin: 0 }}>Export Preview</h3>
-              <div style={{ display: "flex", gap: 6 }}>
-                <button className={`btn small ${viewMode === "grid" ? "primary" : ""}`} onClick={() => setViewMode("grid")}>Grid</button>
-                <button className={`btn small ${viewMode === "json" ? "primary" : ""}`} onClick={() => setViewMode("json")}>JSON</button>
-              </div>
             </div>
 
             {selectedCols.length === 0 ? (
               <div style={{ padding: 48, textAlign: "center", color: "#94a3b8" }}>Select columns to see preview</div>
-            ) : viewMode === "grid" ? (
+            ) : (
               <div style={{ overflowX: "auto" }}>
                 <table className="mapping-table">
                   <thead>
@@ -261,11 +275,6 @@ export default function ExportPage() {
                   </div>
                 )}
               </div>
-            ) : (
-              <pre style={{ background: "#0b2545", color: "#7dd3fc", padding: 16, borderRadius: 8, fontSize: 12, maxHeight: 400, overflow: "auto", whiteSpace: "pre-wrap" }}>
-                {JSON.stringify(exportRows.slice(0, 5), null, 2)}
-                {sourceData.length > 5 && `\n\n// ... ${sourceData.length - 5} more rows`}
-              </pre>
             )}
 
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 14, fontSize: 13, color: "#64748b", borderTop: "1px solid #eef2f7", paddingTop: 12 }}>
@@ -288,7 +297,7 @@ export default function ExportPage() {
                       <td style={{ fontWeight: 600 }}>{h.name}</td>
                       <td>{sourceLabels[h.source] || h.source}</td>
                       <td>{h.rows}</td>
-                      <td><span className="chip">{h.format.toUpperCase()}</span></td>
+                      <td><span className="chip">{(h.format || "xlsx").toUpperCase()}</span></td>
                       <td className="muted">{h.date}</td>
                     </tr>
                   ))}

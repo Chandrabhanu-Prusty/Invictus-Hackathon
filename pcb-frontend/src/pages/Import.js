@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef } from "react";
+import ExcelJS from "exceljs";
 
 const FIELD_MAP = {
     "Name": "name",
@@ -26,40 +27,58 @@ export default function ImportPage() {
         setImportHistory(JSON.parse(localStorage.getItem("importHistory") || "[]"));
     }, []);
 
-    /* ── Parse CSV text ── */
-    function parseCSV(text) {
-        const lines = text.split(/\r?\n/).filter((l) => l.trim());
-        if (lines.length < 2) return { headers: [], rows: [] };
-        const hdr = lines[0].split(",").map((h) => h.replace(/^"|"$/g, "").trim());
-        const rows = lines.slice(1).map((line) => {
-            const vals = line.split(",").map((v) => v.replace(/^"|"$/g, "").trim());
-            const obj = {};
-            hdr.forEach((h, i) => { obj[h] = vals[i] || ""; });
-            return obj;
+    /* ── Parse XLSX file using ExcelJS ── */
+    async function parseXLSX(buffer) {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(buffer);
+        const worksheet = workbook.worksheets[0];
+        if (!worksheet || worksheet.rowCount < 2) return { headers: [], rows: [] };
+
+        const hdr = [];
+        worksheet.getRow(1).eachCell((cell, colNumber) => {
+            hdr[colNumber - 1] = String(cell.value || "").trim();
         });
-        return { headers: hdr, rows };
+
+        const rows = [];
+        worksheet.eachRow((row, rowNumber) => {
+            if (rowNumber === 1) return; // skip header
+            const obj = {};
+            row.eachCell((cell, colNumber) => {
+                const header = hdr[colNumber - 1];
+                if (header) {
+                    obj[header] = cell.value != null ? String(cell.value).trim() : "";
+                }
+            });
+            // Fill in missing headers with empty string
+            hdr.forEach((h) => {
+                if (!(h in obj)) obj[h] = "";
+            });
+            rows.push(obj);
+        });
+
+        return { headers: hdr.filter(Boolean), rows };
     }
 
     /* ── Handle file selection ── */
-    function handleFile(file) {
+    async function handleFile(file) {
         if (!file) return;
+        if (!file.name.toLowerCase().endsWith(".xlsx")) {
+            return alert("Please upload a .xlsx file.");
+        }
         setFileName(file.name);
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const { headers: hdr, rows } = parseCSV(e.target.result);
-            setHeaders(hdr);
-            setRawRows(rows);
+        const buffer = await file.arrayBuffer();
+        const { headers: hdr, rows } = await parseXLSX(buffer);
+        setHeaders(hdr);
+        setRawRows(rows);
 
-            // Auto-map columns by matching names
-            const autoMap = {};
-            FIELDS.forEach((field) => {
-                const match = hdr.find((h) => h.toLowerCase().replace(/[^a-z]/g, "") === field.toLowerCase().replace(/[^a-z]/g, ""));
-                if (match) autoMap[field] = match;
-            });
-            setMapping(autoMap);
-            setStep(2);
-        };
-        reader.readAsText(file);
+        // Auto-map columns by matching names
+        const autoMap = {};
+        FIELDS.forEach((field) => {
+            const match = hdr.find((h) => h.toLowerCase().replace(/[^a-z]/g, "") === field.toLowerCase().replace(/[^a-z]/g, ""));
+            if (match) autoMap[field] = match;
+        });
+        setMapping(autoMap);
+        setStep(2);
     }
 
     function onDrop(e) {
@@ -177,7 +196,7 @@ export default function ImportPage() {
                 <div>
                     <div className="breadcrumbs">Data Management &gt; <strong>IMPORT</strong></div>
                     <h1>Import Components</h1>
-                    <p className="muted">Upload a CSV file to bulk-add or update inventory components.</p>
+                    <p className="muted">Upload an Excel (.xlsx) file to bulk-add or update inventory components.</p>
                 </div>
                 <div className="header-actions">
                     {step > 1 && <button className="btn" onClick={reset}>↩ Start Over</button>}
@@ -202,7 +221,7 @@ export default function ImportPage() {
             {/* ══════════════ STEP 1: Upload ══════════════ */}
             {step === 1 && (
                 <div className="card" style={{ padding: 24, marginTop: 20 }}>
-                    <h3 style={{ marginTop: 0 }}>Upload CSV File</h3>
+                    <h3 style={{ marginTop: 0 }}>Upload Excel File</h3>
 
                     <div
                         className={`drop-zone ${dragOver ? "drag-over" : ""}`}
@@ -213,18 +232,18 @@ export default function ImportPage() {
                     >
                         <div style={{ fontSize: 40, marginBottom: 12 }}>📁</div>
                         <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 6 }}>
-                            Drag & drop your CSV file here
+                            Drag & drop your Excel file here
                         </div>
                         <div className="muted">or click to browse</div>
                         <div className="muted" style={{ fontSize: 11, marginTop: 8 }}>
-                            Supported: .csv files with headers in the first row
+                            Supported: .xlsx files with headers in the first row
                         </div>
-                        <input ref={fileRef} type="file" accept=".csv,.txt" onChange={onBrowse} style={{ display: "none" }} />
+                        <input ref={fileRef} type="file" accept=".xlsx" onChange={onBrowse} style={{ display: "none" }} />
                     </div>
 
                     <div className="card" style={{ marginTop: 20, padding: 16, background: "#f8fafc" }}>
-                        <h4 style={{ marginTop: 0 }}>📋 Expected CSV Format</h4>
-                        <p className="muted" style={{ fontSize: 13, margin: "4px 0 10px" }}>Your CSV should have the following columns (order doesn't matter):</p>
+                        <h4 style={{ marginTop: 0 }}>📋 Expected Excel Format</h4>
+                        <p className="muted" style={{ fontSize: 13, margin: "4px 0 10px" }}>Your Excel file should have the following columns (order doesn't matter):</p>
                         <div style={{ overflowX: "auto" }}>
                             <table className="mapping-table">
                                 <thead>
@@ -249,7 +268,7 @@ export default function ImportPage() {
             {/* ══════════════ STEP 2: Map Columns ══════════════ */}
             {step === 2 && (
                 <div className="card" style={{ padding: 24, marginTop: 20 }}>
-                    <h3 style={{ marginTop: 0 }}>Map CSV Columns</h3>
+                    <h3 style={{ marginTop: 0 }}>Map Excel Columns</h3>
                     <p className="muted" style={{ marginTop: -8 }}>
                         File: <strong>{fileName}</strong> — {rawRows.length} rows detected with {headers.length} columns
                     </p>
@@ -262,7 +281,7 @@ export default function ImportPage() {
 
                     <table className="mapping-table" style={{ maxWidth: 600 }}>
                         <thead>
-                            <tr><th>System Field</th><th>CSV Column</th><th>Status</th></tr>
+                            <tr><th>System Field</th><th>Excel Column</th><th>Status</th></tr>
                         </thead>
                         <tbody>
                             {FIELDS.map((field) => {

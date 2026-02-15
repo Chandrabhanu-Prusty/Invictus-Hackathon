@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ExcelJS from "exceljs";
 
 export default function PCBMapping() {
   const [pcbs, setPcbs] = useState([]);
@@ -87,23 +88,45 @@ export default function PCBMapping() {
     setSelectedPcb("");
   }
 
-  /* ── Export CSV ── */
-  function exportCSV() {
+  /* ── Export XLSX ── */
+  async function exportXLSX() {
     if (!currentPcb || bomRows.length === 0) return alert("No BOM data to export");
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(`BOM - ${currentPcb.name}`);
+
     const headers = ["Component", "Part Number", "Category", "Qty Per Unit", "Available Stock", "Status"];
-    const rows = bomRows.map((r) => {
+    worksheet.addRow(headers);
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B5FFF" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center" };
+    });
+
+    bomRows.forEach((r) => {
       const comp = getCompById(r.compId);
       const status = comp.stock === 0 ? "STOCK OUT" : comp.stock < r.qty * 10 ? "LOW" : "SUFFICIENT";
-      return [comp.name, comp.partNumber, comp.category || "", r.qty, comp.stock, status];
+      worksheet.addRow([comp.name, comp.partNumber, comp.category || "", r.qty, comp.stock, status]);
     });
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
+
+    worksheet.columns.forEach((col, i) => {
+      let maxLen = (headers[i] || "").length;
+      bomRows.forEach((r) => {
+        const comp = getCompById(r.compId);
+        const vals = [comp.name, comp.partNumber, comp.category || "", String(r.qty), String(comp.stock), "SUFFICIENT"];
+        if (vals[i] && vals[i].length > maxLen) maxLen = vals[i].length;
+      });
+      col.width = Math.min(maxLen + 4, 40);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `BOM_${currentPcb.name.replace(/\s/g, "_")}.csv`;
+    a.href = URL.createObjectURL(blob);
+    a.download = `BOM_${currentPcb.name.replace(/\s/g, "_")}.xlsx`;
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
   }
 
   /* ── Helper ── */
@@ -186,7 +209,7 @@ export default function PCBMapping() {
         <div className="summary-header">
           <h3>Mapping Summary {currentPcb ? `— ${currentPcb.name}` : ""}</h3>
           <div className="summary-actions">
-            <button className="btn" onClick={exportCSV} disabled={bomRows.length === 0}>⬇ Export CSV</button>
+            <button className="btn" onClick={exportXLSX} disabled={bomRows.length === 0}>⬇ Export XLSX</button>
           </div>
         </div>
 

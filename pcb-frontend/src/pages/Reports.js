@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import ExcelJS from "exceljs";
 
 export default function Reports() {
   const [components, setComponents] = useState([]);
@@ -49,29 +50,48 @@ export default function Reports() {
   const totalPages = Math.max(1, Math.ceil(filteredComps.length / perPage));
   const pagedComps = filteredComps.slice((page - 1) * perPage, page * perPage);
 
-  /* ── Export CSV ── */
-  function exportCSV() {
-    let csv = "";
+  /* ── Export XLSX ── */
+  async function exportXLSX() {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet(tab === "inventory" ? "Inventory Report" : "Production Report");
+
+    let headers, rows;
     if (tab === "inventory") {
-      const headers = ["Component", "Part Number", "Category", "Stock", "Monthly Required", "Status"];
-      const rows = filteredComps.map((c) => {
+      headers = ["Component", "Part Number", "Category", "Stock", "Monthly Required", "Status"];
+      rows = filteredComps.map((c) => {
         const ratio = c.stock / c.monthlyRequired;
         const status = ratio > 1 ? "Healthy" : ratio > 0.5 ? "Low" : "Critical";
         return [c.name, c.partNumber, c.category, c.stock, c.monthlyRequired, status];
       });
-      csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
     } else {
-      const headers = ["Date", "Time", "PCB Model", "Batch", "Quantity"];
-      const rows = production.map((h) => [h.date, h.time || "", h.pcbName || `PCB #${h.pcbId}`, h.batch || "", h.quantity]);
-      csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
+      headers = ["Date", "Time", "PCB Model", "Batch", "Quantity"];
+      rows = production.map((h) => [h.date, h.time || "", h.pcbName || `PCB #${h.pcbId}`, h.batch || "", h.quantity]);
     }
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
+
+    worksheet.addRow(headers);
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B5FFF" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center" };
+    });
+
+    rows.forEach((r) => worksheet.addRow(r));
+
+    worksheet.columns.forEach((col, i) => {
+      let maxLen = (headers[i] || "").length;
+      rows.forEach((r) => { const val = String(r[i] ?? ""); if (val.length > maxLen) maxLen = val.length; });
+      col.width = Math.min(maxLen + 4, 40);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
-    a.href = url;
-    a.download = `${tab}_report.csv`;
+    a.href = URL.createObjectURL(blob);
+    a.download = `${tab}_report.xlsx`;
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
   }
 
   /* ── Chart: stock distribution by category (horizontal bars) ── */
@@ -110,7 +130,7 @@ export default function Reports() {
           <p className="muted">Last data sync: {new Date().toLocaleString()}</p>
         </div>
         <div className="header-actions">
-          <button className="btn" onClick={exportCSV}>⬇ Export CSV</button>
+          <button className="btn" onClick={exportXLSX}>⬇ Export XLSX</button>
         </div>
       </div>
 

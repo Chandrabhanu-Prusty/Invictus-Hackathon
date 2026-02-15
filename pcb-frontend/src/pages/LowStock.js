@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import ExcelJS from "exceljs";
 
 export default function LowStock() {
   const [components, setComponents] = useState([]);
@@ -79,19 +80,40 @@ export default function LowStock() {
     saveComponents(updated);
   }
 
-  /* ── Export shortage report ── */
-  function exportReport() {
+  /* ── Export shortage report as XLSX ── */
+  async function exportReport() {
     if (alerts.length === 0) return alert("No alerts to export.");
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Shortage Report");
+
     const headers = ["Component", "Part Number", "Category", "Current Stock", "Required", "Deficit", "Status"];
-    const rows = alerts.map((a) => [a.name, a.partNumber, a.category, a.stock, a.required, a.deficit, a.status]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "shortage_report.csv";
-    link.click();
-    URL.revokeObjectURL(url);
+    worksheet.addRow(headers);
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B5FFF" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center" };
+    });
+
+    alerts.forEach((a) => worksheet.addRow([a.name, a.partNumber, a.category, a.stock, a.required, a.deficit, a.status]));
+
+    worksheet.columns.forEach((col, i) => {
+      let maxLen = (headers[i] || "").length;
+      alerts.forEach((a) => {
+        const vals = [a.name, a.partNumber, a.category, String(a.stock), String(a.required), String(a.deficit), a.status];
+        if (vals[i] && vals[i].length > maxLen) maxLen = vals[i].length;
+      });
+      col.width = Math.min(maxLen + 4, 40);
+    });
+
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "shortage_report.xlsx";
+    a.click();
+    URL.revokeObjectURL(a.href);
   }
 
   /* ── KPI counts ── */
