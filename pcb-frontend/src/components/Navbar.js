@@ -95,7 +95,7 @@ export default function Navbar() {
   return (
     <header className="navbar">
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-        <div style={{ fontWeight: 700, color: "#0f172a" }}>PCB Component Inventory</div>
+        <div style={{ fontWeight: 700, color: "#0f172a" }}>Electrolyte Solutions</div>
       </div>
 
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

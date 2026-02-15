@@ -28,8 +28,13 @@ export default function Landing() {
             <nav className="lp-nav">
                 <div className="lp-nav-inner">
                     <div className="lp-brand">
-                        <div className="lp-logo-icon">▦</div>
-                        <span className="lp-brand-name">PCB Inventory Auto</span>
+                        <a href="#top" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: 'smooth' }); }} style={{ display: 'flex', alignItems: 'center', gap: 12, textDecoration: 'none' }}>
+                            <img src="/Favicon-final.png" alt="Logo" style={{ height: 85 }} />
+                            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                                <span style={{ fontSize: 16, fontWeight: 800, color: '#0b5fff', textDecoration: 'underline', letterSpacing: 1 }}>ELECTROLYTE SOLUTIONS</span>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#000000', letterSpacing: 0.5 }}>PCB INVENTORY AUTOMATION SYSTEM</span>
+                            </div>
+                        </a>
                     </div>
 
                     <div className="lp-links">
@@ -175,7 +180,7 @@ export default function Landing() {
             {/* ━━━━━━━━━━━━ CTA BAND ━━━━━━━━━━━━ */}
             <section className="lp-cta" id="cta">
                 <div className="lp-container lp-cta-inner">
-                    <h2>Start Managing PCB Inventory Efficiently</h2>
+                    <h2>Start Managing PCB Inventory with Electrolyte Solutions</h2>
                     <p>Join 500+ manufacturing engineers who have eliminated stockouts and missed production tracking.</p>
                     <div className="lp-hero-ctas" style={{ justifyContent: 'center' }}>
                         <Link to="/login" className="lp-btn lp-btn-accent">Access System</Link>
@@ -188,9 +193,12 @@ export default function Landing() {
             <footer className="lp-footer">
                 <div className="lp-container lp-footer-inner">
                     <div className="lp-footer-brand">
-                        <div className="lp-footer-logo">
-                            <span className="lp-logo-icon small">▦</span>
-                            <strong>PCB Inventory Auto</strong>
+                        <div className="lp-footer-logo" style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <img src="/Favicon-final.png" alt="Logo" style={{ height: 42 }} />
+                            <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                                <strong style={{ fontSize: 15, color: '#0b5fff', textDecoration: 'underline', letterSpacing: 1 }}>ELECTROLYTE SOLUTIONS</strong>
+                                <span style={{ fontSize: 11, fontWeight: 600, color: '#0f172a', letterSpacing: 0.5 }}>PCB INVENTORY AUTOMATION SYSTEM</span>
+                            </div>
                         </div>
                         <p>The next generation of electronic component management, built for engineers, by engineers.</p>
                         <div className="lp-social">
@@ -225,7 +233,7 @@ export default function Landing() {
                 </div>
 
                 <div className="lp-container lp-footer-bottom">
-                    <span>© 2026 PCB Inventory Automation Solutions. All rights reserved.</span>
+                    <span>© 2026 Electrolyte Solutions. All rights reserved.</span>
                     <div>
                         <a href="#!">Privacy Policy</a>
                         <a href="#!">Terms of Service</a>

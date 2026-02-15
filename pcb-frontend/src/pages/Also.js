@@ -78,7 +78,7 @@ export default function Also() {
 
       <section className="cta-band">
         <div className="container cta-inner">
-          <h2>Start Managing PCB Inventory Efficiently</h2>
+          <h2>Start Managing PCB Inventory with Electrolyte Solutions</h2>
           <p>Join 500+ manufacturing engineers who have eliminated stockouts.</p>
           <div className="hero-ctas">
             <button className="btn primary">Access System</button>
@@ -89,7 +89,7 @@ export default function Also() {
 
       <footer className="page-footer container">
         <div className="footer-left">
-          <strong>PCB Inventory Auto</strong>
+          <strong>Electrolyte Solutions</strong>
           <p>The next generation of electronic component management.</p>
         </div>
         <div className="footer-links">

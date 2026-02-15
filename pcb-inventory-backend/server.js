@@ -33,7 +33,7 @@ app.use('/health', healthRoutes);
 
 // Root
 app.get('/', (req, res) => {
-  res.json({ status: 'PCB Inventory Backend is running' });
+  res.json({ status: 'Electrolyte Solutions - PCB Inventory Automation System is running' });
 });
 
 // Global error handler (must be AFTER all routes)

@@ -5,7 +5,7 @@ export default function Sidebar() {
   return (
     <aside className="sidebar">
       <div className="sidebar-top">
-        <div className="logo">PCB Inventory</div>
+        <div className="logo">Electrolyte Solutions</div>
       </div>
       <nav className="menu">
         <NavLink to="/dashboard" className={({ isActive }) => isActive ? 'menu-item active' : 'menu-item'}><span className="icon">🏠</span> Dashboard</NavLink>
