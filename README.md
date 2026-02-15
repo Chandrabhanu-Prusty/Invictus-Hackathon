@@ -1,19 +1,47 @@
-# PCB Component Inventory Management System
+# ⚡ Electrolyte Solutions — PCB Inventory Automation System
 
 A full-stack web application for managing PCB (Printed Circuit Board) component inventory, Bill of Materials (BOM), production tracking, and procurement insights — built for manufacturing operations teams.
 
 ---
 
+## 🏗️ System Architecture
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/PCB inventory management system architecture.png" alt="System Architecture" />
+</p>
+
+---
+
+## 🔄 PERN Stack Workflow
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/PERN Stack workflow.png" alt="PERN Stack Workflow" />
+</p>
+
+---
+
+## 🗃️ Database Design
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/Database design.png" alt="Database Design" />
+</p>
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/ER Diagram.jpeg" alt="ER Diagram" />
+</p>
+
+---
+
 ## Tech Stack
 
-| Layer           | Technology                                |
-| --------------- | ----------------------------------------- |
-| **Frontend**    | React 18, React Router v6, ExcelJS, Axios |
-| **Backend**     | Node.js, Express.js, express-validator    |
-| **Database**    | PostgreSQL                                |
-| **Auth**        | JWT (jsonwebtoken + bcrypt)               |
-| **File Upload** | Multer (Excel .xlsx)                      |
-| **Styling**     | Vanilla CSS (custom design system)        |
+| Layer           | Technology                             |
+| --------------- | -------------------------------------- |
+| **Frontend**    | React 18, React Router v6, ExcelJS     |
+| **Backend**     | Node.js, Express.js, express-validator |
+| **Database**    | PostgreSQL                             |
+| **Auth**        | JWT (jsonwebtoken + bcrypt)            |
+| **File Upload** | Multer (Excel .xlsx)                   |
+| **Styling**     | Vanilla CSS (custom design system)     |
 
 ---
 
@@ -24,7 +52,6 @@ JR-50-Invictus/
 ├── pcb-frontend/              # React SPA
 │   ├── src/
 │   │   ├── api.js             # Centralized API helper (fetch + field mappers)
-│   │   ├── api/apiClient.js   # Axios instance with JWT interceptors
 │   │   ├── components/        # Navbar, Sidebar, ProtectedRoute
 │   │   ├── pages/             # Dashboard, Inventory, Production, PCBMapping, etc.
 │   │   └── index.css          # Global styles
@@ -71,7 +98,7 @@ The schema is auto-initialized on first startup — if the `components` table do
 ### Start Server
 
 ```bash
-node server.js
+npm run dev
 ```
 
 Server runs on **http://localhost:5000** by default.
@@ -134,6 +161,10 @@ JWT_SECRET=your_jwt_secret
 | ------ | ------------- | ---- | ------------------------- |
 | `POST` | `/auth/login` | ✗    | Login → returns JWT token |
 
+<p align="center">
+  <img src="pcb-frontend/public/ss/Secure authentication API test.png" alt="Secure Authentication API Test" width="500" />
+</p>
+
 ### Components
 
 | Method   | Endpoint          | Auth | Description         |
@@ -163,10 +194,11 @@ JWT_SECRET=your_jwt_secret
 
 ### Analytics
 
-| Method | Endpoint                  | Auth | Description                |
-| ------ | ------------------------- | ---- | -------------------------- |
-| `GET`  | `/analytics/low-stock`    | ✓    | Components below threshold |
-| `GET`  | `/analytics/top-consumed` | ✓    | Most consumed components   |
+| Method | Endpoint                         | Auth | Description                          |
+| ------ | -------------------------------- | ---- | ------------------------------------ |
+| `GET`  | `/analytics/low-stock`           | ✓    | Components below threshold           |
+| `GET`  | `/analytics/top-consumed`        | ✓    | Most consumed components             |
+| `GET`  | `/analytics/consumption-summary` | ✓    | Component-wise consumption breakdown |
 
 ### Excel Import
 
@@ -174,6 +206,52 @@ JWT_SECRET=your_jwt_secret
 | ------ | -------------------------- | ---- | ------------------------------- |
 | `POST` | `/excel/import-components` | ✓    | Bulk import components (.xlsx)  |
 | `POST` | `/excel/import-bom`        | ✓    | Bulk import BOM mapping (.xlsx) |
+
+---
+
+## Feature Screenshots
+
+### 🔐 Secure Authentication
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/Secure authentication API test.png" alt="Secure Authentication API Test" width="500" />
+</p>
+
+### 📦 Bulk Component Data Upload
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/Bulk component data upload.png" alt="Bulk Component Data Upload" width="500" />
+</p>
+
+### 🧩 PCB–Component Mapping Import
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/PCB–component mapping import.png" alt="PCB-Component Mapping Import" width="500" />
+</p>
+
+### 🏭 Automatic Inventory Deduction
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/Automatic inventory deduction evidence.png" alt="Automatic Inventory Deduction Evidence" width="500" />
+</p>
+
+### 📋 Production Usage Audit Trail
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/Production usage audit trail.png" alt="Production Usage Audit Trail" width="500" />
+</p>
+
+### ⚠️ Automated Low Stock Detection
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/Automated low stock detection.png" alt="Automated Low Stock Detection" width="500" />
+</p>
+
+### 📊 Component Consumption Ranking
+
+<p align="center">
+  <img src="pcb-frontend/public/ss/Component consumption ranking.png" alt="Component Consumption Ranking" width="500" />
+</p>
 
 ---
 
@@ -226,7 +304,6 @@ JWT_SECRET=your_jwt_secret
 - [ ] Barcode/QR code scanning for stock updates
 - [ ] Supplier management module with lead times
 - [ ] Email/SMS notifications for low-stock and procurement triggers
-- [ ] Dashboard charts with Chart.js or Recharts
 - [ ] Pagination and full-text search on all list endpoints
 - [ ] Docker + docker-compose for one-command deployment
 - [ ] CI/CD pipeline with automated testing

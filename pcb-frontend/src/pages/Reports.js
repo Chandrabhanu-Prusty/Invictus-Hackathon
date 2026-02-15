@@ -1,11 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import ExcelJS from "exceljs";
-import { fetchComponents, fetchPCBs, fetchProductionHistory } from "../api";
+import { fetchComponents, fetchProductionHistory } from "../api";
 
 export default function Reports() {
   const [components, setComponents] = useState([]);
   const [production, setProduction] = useState([]);
-  const [pcbs, setPcbs] = useState([]);
   const [catFilter, setCatFilter] = useState("All");
   const [statusFilter, setStatusFilter] = useState("All");
   const [tab, setTab] = useState("inventory");
@@ -15,7 +14,6 @@ export default function Reports() {
   useEffect(() => {
     fetchComponents().then(setComponents).catch(console.error);
     fetchProductionHistory().then(setProduction).catch(console.error);
-    fetchPCBs().then(setPcbs).catch(console.error);
   }, []);
 
   /* ── Categories ── */
