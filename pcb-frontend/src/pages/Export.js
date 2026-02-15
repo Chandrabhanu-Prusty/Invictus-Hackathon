@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import ExcelJS from "exceljs";
+import { fetchComponents, fetchPCBs, fetchProductionHistory } from "../api";
 
 /* ── Column definitions per data source (stable reference) ── */
 const columnDefs = {
@@ -53,9 +54,9 @@ export default function ExportPage() {
   const [exportHistory, setExportHistory] = useState([]);
 
   useEffect(() => {
-    setComponents(JSON.parse(localStorage.getItem("components") || "[]"));
-    setProduction(JSON.parse(localStorage.getItem("productionHistory") || "[]"));
-    setPcbs(JSON.parse(localStorage.getItem("pcbs") || "[]"));
+    fetchComponents().then(setComponents).catch(console.error);
+    fetchProductionHistory().then(setProduction).catch(console.error);
+    fetchPCBs().then(setPcbs).catch(console.error);
     setExportHistory(JSON.parse(localStorage.getItem("exportHistory") || "[]"));
   }, []);
 

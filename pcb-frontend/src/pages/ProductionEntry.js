@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { fetchComponents, fetchPCBs, recordProduction, fetchProductionHistory } from "../api";
 
 export default function ProductionEntry() {
   const [pcbs, setPcbs] = useState([]);
@@ -10,13 +11,27 @@ export default function ProductionEntry() {
   const [qty, setQty] = useState(100);
   const [preview, setPreview] = useState([]);
   const [success, setSuccess] = useState("");
+  const [submitting, setSubmitting] = useState(false);
   const nav = useNavigate();
 
   useEffect(() => {
-    setPcbs(JSON.parse(localStorage.getItem("pcbs") || "[]"));
-    setComponents(JSON.parse(localStorage.getItem("components") || "[]"));
-    setHistory(JSON.parse(localStorage.getItem("productionHistory") || "[]"));
+    loadData();
   }, []);
+
+  async function loadData() {
+    try {
+      const [comps, pcbList, prod] = await Promise.all([
+        fetchComponents(),
+        fetchPCBs(),
+        fetchProductionHistory(),
+      ]);
+      setComponents(comps);
+      setPcbs(pcbList);
+      setHistory(prod);
+    } catch (err) {
+      console.error("Failed to load data:", err);
+    }
+  }
 
   /* ── Build deduction preview whenever PCB or qty changes ── */
   useEffect(() => {
@@ -41,58 +56,34 @@ export default function ProductionEntry() {
   }, [selected, qty, pcbs, components]);
 
   /* ── Submit production ── */
-  function handleSubmit() {
+  async function handleSubmit() {
     if (!selected) return;
     if (!batch.trim()) return alert("Please enter a batch number.");
     if (qty <= 0) return alert("Quantity must be greater than zero.");
 
-    // Check if any component will go negative
     const negatives = preview.filter((p) => p.projected < 0);
     if (negatives.length > 0) {
       const names = negatives.map((n) => n.component).join(", ");
       if (!window.confirm(`Warning: ${names} will have insufficient stock. Continue anyway?`)) return;
     }
 
-    // Deduct component stocks
-    const comps = [...components];
-    preview.forEach((p) => {
-      const idx = comps.findIndex((c) => c.id === p.id);
-      if (idx >= 0) comps[idx] = { ...comps[idx], stock: Math.max(0, comps[idx].stock - p.required) };
-    });
-    setComponents(comps);
-    localStorage.setItem("components", JSON.stringify(comps));
-
-    // Save production history entry
-    const pcb = pcbs.find((p) => String(p.id) === String(selected));
-    const entry = {
-      id: Date.now(),
-      pcbId: parseInt(selected),
-      pcbName: pcb?.name || "Unknown",
-      batch: batch.trim(),
-      quantity: qty,
-      date: new Date().toISOString().split("T")[0],
-      time: new Date().toLocaleTimeString(),
-      componentsUsed: preview.length,
-    };
-    const updatedHistory = [entry, ...history];
-    setHistory(updatedHistory);
-    localStorage.setItem("productionHistory", JSON.stringify(updatedHistory));
-
-    // Reset form
-    setSuccess(`✅ Production batch "${batch}" recorded — ${qty} units of ${pcb?.name}. Stocks updated.`);
-    setSelected("");
-    setBatch("");
-    setQty(100);
-    setPreview([]);
-    setTimeout(() => setSuccess(""), 5000);
-  }
-
-  /* ── Delete history entry ── */
-  function deleteEntry(id) {
-    if (!window.confirm("Delete this production record?")) return;
-    const updated = history.filter((h) => h.id !== id);
-    setHistory(updated);
-    localStorage.setItem("productionHistory", JSON.stringify(updated));
+    setSubmitting(true);
+    try {
+      const pcb = pcbs.find((p) => String(p.id) === String(selected));
+      await recordProduction(parseInt(selected), qty);
+      setSuccess(`✅ Production batch "${batch}" recorded — ${qty} units of ${pcb?.name}. Stocks updated.`);
+      setSelected("");
+      setBatch("");
+      setQty(100);
+      setPreview([]);
+      // Refresh data from API
+      await loadData();
+      setTimeout(() => setSuccess(""), 5000);
+    } catch (err) {
+      alert(err.message || "Production recording failed");
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   /* ── KPI calculations ── */
@@ -155,10 +146,10 @@ export default function ProductionEntry() {
               <button
                 className="btn primary"
                 onClick={handleSubmit}
-                disabled={!preview.length}
+                disabled={!preview.length || submitting}
                 style={{ flex: 1 }}
               >
-                Submit Production
+                {submitting ? "Submitting..." : "Submit Production"}
               </button>
               <button className="btn" onClick={() => { setSelected(""); setBatch(""); setQty(100); setPreview([]); }}>Reset</button>
             </div>
@@ -252,12 +243,11 @@ export default function ProductionEntry() {
               <th>Batch No.</th>
               <th>Quantity</th>
               <th>Components Used</th>
-              <th>Actions</th>
             </tr>
           </thead>
           <tbody>
             {history.length === 0 && (
-              <tr><td colSpan={7} style={{ padding: 32, textAlign: "center", color: "#94a3b8" }}>No production records yet. Submit your first batch above.</td></tr>
+              <tr><td colSpan={6} style={{ padding: 32, textAlign: "center", color: "#94a3b8" }}>No production records yet. Submit your first batch above.</td></tr>
             )}
             {history.slice(0, 20).map((h) => (
               <tr key={h.id}>
@@ -267,7 +257,6 @@ export default function ProductionEntry() {
                 <td><span className="chip">{h.batch || `BATCH-${h.id}`}</span></td>
                 <td style={{ fontWeight: 700 }}>{h.quantity}</td>
                 <td>{h.componentsUsed || "—"}</td>
-                <td><button className="btn small danger" onClick={() => deleteEntry(h.id)}>🗑</button></td>
               </tr>
             ))}
           </tbody>

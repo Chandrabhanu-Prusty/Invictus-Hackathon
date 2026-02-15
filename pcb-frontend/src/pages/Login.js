@@ -1,18 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
-import { seedLocal } from "../data/mockData";
+import { login } from "../api";
 
 export default function Login() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
   const nav = useNavigate();
 
-  useEffect(() => {
-    seedLocal();
-  }, []);
-
-  function handleLogin(e) {
+  async function handleLogin(e) {
     e.preventDefault();
     setError("");
 
@@ -21,18 +18,16 @@ export default function Login() {
       return;
     }
 
-    // Check registered users in localStorage
-    const users = JSON.parse(localStorage.getItem("users") || "[]");
-    const user = users.find(
-      (u) => u.email === email && u.password === password
-    );
-
-    if (user) {
-      localStorage.setItem("token", "mock-token");
-      localStorage.setItem("currentUser", JSON.stringify({ name: user.name, email: user.email }));
+    setLoading(true);
+    try {
+      const data = await login(email, password);
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("currentUser", JSON.stringify(data.user));
       nav("/dashboard");
-    } else {
-      setError("Invalid email or password. Please try again.");
+    } catch (err) {
+      setError(err.message || "Invalid email or password. Please try again.");
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -63,7 +58,9 @@ export default function Login() {
 
             {error && <div className="auth-error">{error}</div>}
 
-            <button className="auth-btn" type="submit">Login</button>
+            <button className="auth-btn" type="submit" disabled={loading}>
+              {loading ? "Logging in..." : "Login"}
+            </button>
           </form>
 
           <div className="back-link">

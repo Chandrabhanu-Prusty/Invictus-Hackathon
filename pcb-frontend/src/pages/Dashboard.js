@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Card from "../components/Card";
+import { fetchComponents, fetchPCBs, fetchProductionHistory } from "../api";
 
 export default function Dashboard() {
   const [components, setComponents] = useState([]);
@@ -9,12 +10,9 @@ export default function Dashboard() {
   const nav = useNavigate();
 
   useEffect(() => {
-    const comps = JSON.parse(localStorage.getItem("components") || "[]");
-    const pcbData = JSON.parse(localStorage.getItem("pcbs") || "[]");
-    const prodData = JSON.parse(localStorage.getItem("productionHistory") || "[]");
-    setComponents(comps);
-    setPcbs(pcbData);
-    setProduction(prodData);
+    fetchComponents().then(setComponents).catch(console.error);
+    fetchPCBs().then(setPcbs).catch(console.error);
+    fetchProductionHistory().then(setProduction).catch(console.error);
   }, []);
 
   /* ── KPI calculations ── */

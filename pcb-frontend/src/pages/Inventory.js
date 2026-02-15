@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { fetchComponents, addComponent as apiAdd, updateComponent as apiUpdate, deleteComponent as apiDelete } from "../api";
+import ExcelJS from "exceljs";
 
 export default function Inventory() {
   const [components, setComponents] = useState([]);
@@ -14,13 +16,16 @@ export default function Inventory() {
   const [form, setForm] = useState({ name: "", partNumber: "", category: "", stock: "", monthlyRequired: "" });
 
   useEffect(() => {
-    const comps = JSON.parse(localStorage.getItem("components") || "[]");
-    setComponents(comps);
+    loadComponents();
   }, []);
 
-  function saveAll(list) {
-    setComponents(list);
-    localStorage.setItem("components", JSON.stringify(list));
+  async function loadComponents() {
+    try {
+      const comps = await fetchComponents();
+      setComponents(comps);
+    } catch (err) {
+      console.error("Failed to load components:", err);
+    }
   }
 
   /* ── CRUD ── */
@@ -42,47 +47,62 @@ export default function Inventory() {
     setShowModal(true);
   }
 
-  function handleSave() {
-    if (!form.name || !form.partNumber || !form.category || !form.stock || !form.monthlyRequired) {
+  async function handleSave() {
+    if (!form.name || !form.partNumber || !form.stock || !form.monthlyRequired) {
       alert("Please fill all fields");
       return;
     }
-    const entry = {
-      name: form.name,
-      partNumber: form.partNumber,
-      category: form.category,
-      stock: Number(form.stock),
-      monthlyRequired: Number(form.monthlyRequired),
-    };
-
-    if (editId !== null) {
-      // Update
-      const updated = components.map((c) => (c.id === editId ? { ...c, ...entry } : c));
-      saveAll(updated);
-    } else {
-      // Add
-      const maxId = components.reduce((m, c) => Math.max(m, c.id), 0);
-      saveAll([...components, { id: maxId + 1, ...entry }]);
+    try {
+      if (editId !== null) {
+        await apiUpdate(editId, form);
+      } else {
+        await apiAdd(form);
+      }
+      await loadComponents();
+      setShowModal(false);
+    } catch (err) {
+      alert(err.message || "Save failed");
     }
-    setShowModal(false);
   }
 
-  function handleDelete(id) {
+  async function handleDelete(id) {
     if (!window.confirm("Are you sure you want to delete this component?")) return;
-    saveAll(components.filter((c) => c.id !== id));
+    try {
+      await apiDelete(id);
+      await loadComponents();
+    } catch (err) {
+      alert(err.message || "Delete failed");
+    }
   }
 
-  function handleDownloadCSV() {
+  async function handleDownloadXLSX() {
+    const workbook = new ExcelJS.Workbook();
+    const worksheet = workbook.addWorksheet("Inventory");
     const headers = ["Name", "Part Number", "Category", "Stock", "Monthly Required", "Status"];
-    const rows = annotated.map((c) => [c.name, c.partNumber, c.category, c.stock, c.monthlyRequired, c.status]);
-    const csv = [headers, ...rows].map((r) => r.join(",")).join("\n");
-    const blob = new Blob([csv], { type: "text/csv" });
-    const url = URL.createObjectURL(blob);
+    worksheet.addRow(headers);
+    const headerRow = worksheet.getRow(1);
+    headerRow.font = { bold: true };
+    headerRow.eachCell((cell) => {
+      cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF0B5FFF" } };
+      cell.font = { bold: true, color: { argb: "FFFFFFFF" } };
+      cell.alignment = { horizontal: "center" };
+    });
+    annotated.forEach((c) => worksheet.addRow([c.name, c.partNumber, c.category, c.stock, c.monthlyRequired, c.status]));
+    worksheet.columns.forEach((col, i) => {
+      let maxLen = (headers[i] || "").length;
+      annotated.forEach((c) => {
+        const vals = [c.name, c.partNumber, c.category, String(c.stock), String(c.monthlyRequired), c.status];
+        if (vals[i] && vals[i].length > maxLen) maxLen = vals[i].length;
+      });
+      col.width = Math.min(maxLen + 4, 40);
+    });
+    const buffer = await workbook.xlsx.writeBuffer();
+    const blob = new Blob([buffer], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
     const a = document.createElement("a");
-    a.href = url;
-    a.download = "inventory.csv";
+    a.href = URL.createObjectURL(blob);
+    a.download = "inventory.xlsx";
     a.click();
-    URL.revokeObjectURL(url);
+    URL.revokeObjectURL(a.href);
   }
 
   /* ── Derived data ── */
@@ -125,7 +145,7 @@ export default function Inventory() {
           <p className="muted">Manage and track PCB components across all production lines and storage zones.</p>
         </div>
         <div className="header-actions">
-          <button className="btn" onClick={handleDownloadCSV}>⬇ Export CSV</button>
+          <button className="btn" onClick={handleDownloadXLSX}>⬇ Export XLSX</button>
           <button className="btn primary" onClick={openAdd}>+ Add Component</button>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ExcelJS from "exceljs";
+import { fetchComponents, updateComponent } from "../api";
 
 export default function LowStock() {
   const [components, setComponents] = useState([]);
@@ -9,12 +10,16 @@ export default function LowStock() {
   const [showReorder, setShowReorder] = useState(null);
 
   useEffect(() => {
-    setComponents(JSON.parse(localStorage.getItem("components") || "[]"));
+    loadComponents();
   }, []);
 
-  function saveComponents(list) {
-    setComponents(list);
-    localStorage.setItem("components", JSON.stringify(list));
+  async function loadComponents() {
+    try {
+      const comps = await fetchComponents();
+      setComponents(comps);
+    } catch (err) {
+      console.error("Failed to load components:", err);
+    }
   }
 
   /* ── Build alerts from components that are at or below monthly required ── */
@@ -56,28 +61,34 @@ export default function LowStock() {
   });
 
   /* ── Reorder (add stock) ── */
-  function handleReorder(alert) {
-    const addQty = parseInt(reorderQty[alert.id]) || alert.required;
-    const updated = components.map((c) =>
-      c.id === alert.id ? { ...c, stock: c.stock + addQty } : c
-    );
-    saveComponents(updated);
+  async function handleReorder(alertItem) {
+    const addQty = parseInt(reorderQty[alertItem.id]) || alertItem.required;
+    const comp = components.find((c) => c.id === alertItem.id);
+    if (!comp) return;
+    try {
+      await updateComponent(comp.id, { ...comp, stock: String(comp.stock + addQty) });
+      await loadComponents();
+    } catch (err) {
+      window.alert(err.message || "Reorder failed");
+    }
     setShowReorder(null);
     setReorderQty({});
   }
 
   /* ── Reorder all critical ── */
-  function reorderAllCritical() {
-    const critIds = alerts.filter((a) => a.status === "CRITICAL").map((a) => a.id);
-    if (critIds.length === 0) return alert("No critical items to reorder.");
-    if (!window.confirm(`Reorder ${critIds.length} critical items to full stock levels?`)) return;
-    const updated = components.map((c) => {
-      if (critIds.includes(c.id)) {
-        return { ...c, stock: c.stock + c.monthlyRequired };
+  async function reorderAllCritical() {
+    const critItems = alerts.filter((a) => a.status === "CRITICAL");
+    if (critItems.length === 0) return window.alert("No critical items to reorder.");
+    if (!window.confirm(`Reorder ${critItems.length} critical items to full stock levels?`)) return;
+    try {
+      for (const a of critItems) {
+        const comp = components.find((c) => c.id === a.id);
+        if (comp) await updateComponent(comp.id, { ...comp, stock: String(comp.stock + comp.monthlyRequired) });
       }
-      return c;
-    });
-    saveComponents(updated);
+      await loadComponents();
+    } catch (err) {
+      window.alert(err.message || "Reorder failed");
+    }
   }
 
   /* ── Export shortage report as XLSX ── */
